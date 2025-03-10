@@ -1,0 +1,21 @@
+{
+  "name": "discord-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot to reset KeyAuth licenses",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.3.1",
+    "quick.db": "^7.1.3",
+    "axios": "^1.4.0"
+  },
+  "engines": {
+    "node": ">=16.6.0"
+  },
+  "keywords": ["discord", "bot", "keyauth"],
+  "author": "Your Name",
+  "license": "MIT"
+}
