@@ -2,6 +2,7 @@ import os
 import discord
 import requests
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 
 # Load environment variables from .env
@@ -14,7 +15,7 @@ intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 # Dictionary to store seller keys per server
 seller_keys = {}
@@ -23,19 +24,34 @@ seller_keys = {}
 async def on_ready():
     print(f"✅ Bot is online as {bot.user}")
 
-# Command to set seller key (Admin only)
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setsellerkey(ctx, key: str):
-    seller_keys[ctx.guild.id] = key
-    await ctx.send(f"✅ Seller key set for this server!")
+    try:
+        await bot.tree.sync()
+        print("✅ Slash Commands Synced!")
+    except Exception as e:
+        print(f"❌ Error syncing commands: {e}")
 
-# Command to send KeyAuth reset embed
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def sendresetembed(ctx, *, message: str):
-    if ctx.guild.id not in seller_keys:
-        await ctx.send("⚠️ Seller Key not set! Use `!setsellerkey <key>` first.")
+    # Set Bot Status
+    await bot.change_presence(activity=discord.Game(name="Managing Rapid Loader"))
+
+# Admin-only check function
+def is_admin():
+    async def predicate(interaction: discord.Interaction):
+        return interaction.user.guild_permissions.administrator
+    return app_commands.check(predicate)
+
+# Slash Command to Set Seller Key (Admin Only)
+@bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
+@is_admin()
+async def setsellerkey(interaction: discord.Interaction, key: str):
+    seller_keys[interaction.guild.id] = key
+    await interaction.response.send_message("✅ Seller Key set successfully for this server!", ephemeral=True)
+
+# Slash Command to Send Reset Embed (Admin Only)
+@bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
+@is_admin()
+async def sendresetembed(interaction: discord.Interaction, message: str):
+    if interaction.guild.id not in seller_keys:
+        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
         return
 
     embed = discord.Embed(
@@ -46,8 +62,9 @@ async def sendresetembed(ctx, *, message: str):
     embed.set_footer(text="© 2025 RAPIDFIRE - All Rights Reserved")
 
     view = ResetButton()
-    await ctx.send(embed=embed, view=view)
+    await interaction.response.send_message("@everyone", embed=embed, view=view)
 
+# Button Handling for License Reset
 class ResetButton(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -65,7 +82,7 @@ class ResetButton(discord.ui.View):
 
             seller_key = seller_keys.get(interaction.guild.id)
             if not seller_key:
-                await interaction.followup.send("⚠️ Seller Key not set! Use `!setsellerkey <key>` first.", ephemeral=True)
+                await interaction.followup.send("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
                 return
 
             api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
