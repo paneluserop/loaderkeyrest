@@ -48,7 +48,7 @@ async def on_ready():
         print(f"❌ Error syncing commands: {e}")
 
     # Set Bot Status
-    await bot.change_presence(activity=discord.Game(name="MANAGING RAPIDFIRE LOADER 🔥"))
+    await bot.change_presence(activity=discord.Game(name="Managing RAPIDFIRE CORPORATION 🔥"))
 
 # Admin-only check function
 def is_admin():
@@ -100,11 +100,12 @@ async def setwebhook(interaction: discord.Interaction, url: str):
     embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Slash Command to Send Reset Embed (Admin Only)
+# Slash Command to Send Reset Embed (Anonymous & Lifetime)
 @bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
 @is_admin()
 async def sendresetembed(interaction: discord.Interaction, message: str):
-    if str(interaction.guild.id) not in data or "seller_key" not in data[str(interaction.guild.id)]:
+    guild_id = str(interaction.guild.id)
+    if guild_id not in data or "seller_key" not in data[guild_id]:
         await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
         return
 
@@ -116,7 +117,11 @@ async def sendresetembed(interaction: discord.Interaction, message: str):
     embed.set_footer(text="© 2025 RAPIDFIRE CORPORATION - License Reset System")
 
     view = ResetButton()
-    await interaction.response.send_message("@everyone", embed=embed, view=view)
+
+    # Delete the original command message and send a new embed in the channel
+    await interaction.response.defer(ephemeral=True)
+    channel = interaction.channel
+    await channel.send(embed=embed, view=view)
 
 # Button Handling for License Reset
 class ResetButton(discord.ui.View):
@@ -153,26 +158,13 @@ class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
         seller_key = data[guild_id]["seller_key"]
         api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
 
-        try:
-            response = requests.get(api_url, timeout=10)
-            api_data = response.json()
+        response = requests.get(api_url, timeout=10)
+        api_data = response.json()
 
-            if response.status_code == 200 and api_data.get("success", False):
-                result_message = "✅ **License successfully reset!**"
-                embed_color = discord.Color.green()
-            else:
-                result_message = f"❌ **License reset failed!**\n**Reason:** {api_data.get('message', 'Unknown Error')}"
-                embed_color = discord.Color.red()
+        embed_color = discord.Color.green() if api_data.get("success", False) else discord.Color.red()
+        result_message = "✅ **License successfully reset!**" if api_data.get("success", False) else f"❌ **License reset failed!**\n**Reason:** {api_data.get('message', 'Unknown Error')}"
 
-        except requests.RequestException:
-            result_message = "⚠️ **Error contacting KeyAuth API. Please try again later.**"
-            embed_color = discord.Color.orange()
-
-        embed = discord.Embed(
-            title="🔄 License Reset Result",
-            description=result_message,
-            color=embed_color
-        )
+        embed = discord.Embed(title="🔄 License Reset Result", description=result_message, color=embed_color)
         embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
