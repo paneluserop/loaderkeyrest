@@ -162,22 +162,34 @@ async def testlicense(interaction: discord.Interaction, license_key: str):
     embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
     await interaction.response.send_message(embed=embed)
 
+# Slash Command: Send Reset Embed
+@bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
+@is_admin()
+async def sendresetembed(interaction: discord.Interaction, message: str):
+    guild_id = str(interaction.guild.id)
+    branding = get_branding(guild_id)
+
+    if guild_id not in data or "seller_key" not in data[guild_id]:
+        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title=f"🔄 License Key Reset - {branding}",
+        description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"© 2025 {branding} - License Reset System")
+
+    await interaction.response.send_message(embed=embed)
+
 # Slash Command: Help Menu
 @bot.tree.command(name="help", description="View all available bot commands.")
 async def help_command(interaction: discord.Interaction):
     branding = get_branding(interaction.guild.id)
-    embed = discord.Embed(
-        title=f"🆘 {branding} - Help Menu",
-        description="Here are the available commands:",
-        color=discord.Color.blue()
+    await interaction.response.send_message(
+        f"**Available Commands:**\n"
+        f"`/ping` `/setsellerkey` `/setwebhook` `/apistatus` `/testlicense` `/sendresetembed` `/help`",
+        ephemeral=True
     )
-    embed.add_field(name="🔄 `/sendresetembed <message>`", value="Send a reset embed for users to reset their license keys.", inline=False)
-    embed.add_field(name="🔑 `/setsellerkey <key>`", value="Set the KeyAuth seller key for this server.", inline=False)
-    embed.add_field(name="🌐 `/setwebhook <url>`", value="Set the webhook URL for logging resets.", inline=False)
-    embed.add_field(name="📡 `/apistatus`", value="Check if KeyAuth API is online.", inline=False)
-    embed.add_field(name="🔍 `/testlicense <license>`", value="Check if a license key is valid without resetting it.", inline=False)
-    embed.add_field(name="🏓 `/ping`", value="Check bot latency.", inline=False)
-    embed.set_footer(text=f"🚀 Powered by {branding}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 bot.run(BOT_TOKEN)
