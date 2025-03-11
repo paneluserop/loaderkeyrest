@@ -4,7 +4,6 @@ import discord
 import requests
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import Button, View, Modal, InputText
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -22,14 +21,14 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 # Database File for Storing Seller Keys, Webhooks, and Branding
 DATA_FILE = "data.json"
 
-# Load existing seller keys, webhooks, and branding from database file
+# Load existing data (seller keys, webhooks, branding)
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     return {}
 
-# Save seller keys, webhooks, and branding to the database file
+# Save data to the file
 def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
@@ -59,68 +58,6 @@ def is_admin():
     async def predicate(interaction: discord.Interaction):
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
-
-# Function to reset the license key
-async def reset_license(interaction: discord.Interaction, license_key: str):
-    guild_id = str(interaction.guild.id)
-    seller_key = data[guild_id]["seller_key"]
-    api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=reset&user={license_key}"
-
-    try:
-        response = requests.get(api_url, timeout=10)
-        api_data = response.json()
-
-        if api_data.get("success", False):
-            await interaction.user.send(f"✅ Your license key `{license_key}` has been reset successfully!")
-            # Log to webhook if set
-            webhook_url = data[guild_id].get("webhook_url")
-            if webhook_url:
-                requests.post(webhook_url, json={"content": f"License key `{license_key}` has been reset by {interaction.user.name}."})
-        else:
-            await interaction.user.send(f"❌ Failed to reset your license key `{license_key}`. Please check the key and try again.")
-    except Exception as e:
-        await interaction.user.send(f"❌ An error occurred while resetting the license: {str(e)}")
-
-# Modal for License Key Input
-class LicenseKeyModal(Modal):
-    def __init__(self):
-        super().__init__(title="Enter License Key")
-        self.add_item(InputText(label="License Key", placeholder="Enter your license key here"))
-
-    async def callback(self, interaction: discord.Interaction):
-        license_key = self.children[0].value
-        await reset_license(interaction, license_key)
-
-# Slash Command: Send Reset Embed
-@bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
-@is_admin()
-async def sendresetembed(interaction: discord.Interaction, message: str):
-    guild_id = str(interaction.guild.id)
-    branding = get_branding(guild_id)
-
-    if guild_id not in data or "seller_key" not in data[guild_id]:
-        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
-        return
-
-    embed = discord.Embed(
-        title=f"🔄 License Key Reset - {branding}",
-        description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"© 2025 {branding} - License Reset System")
-
-    button = Button(label="Reset License Key", style=discord.ButtonStyle.primary)
-
-    async def button_callback(interaction: discord.Interaction):
-        modal = LicenseKeyModal()
-        await interaction.response.send_modal(modal)
-
-    button.callback = button_callback
-    view = View()
-    view.add_item(button)
-
-    await interaction.channel.send(embed=embed, view=view)
-
 # Slash Command: Set Seller Key
 @bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
 @is_admin()
@@ -180,18 +117,14 @@ async def testlicense(interaction: discord.Interaction, license_key: str):
     seller_key = data[guild_id]["seller_key"]
     api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=userdata&user={license_key}"
 
-    try:
-        response = requests.get(api_url, timeout=10)
-        api_data = response.json()
+    response = requests.get(api_url, timeout=10)
+    api_data = response.json()
 
-        if api_data.get("success", False):
-            status_msg = "✅ **Valid License!**"
-            color = discord.Color.green()
-        else:
-            status_msg = "❌ **Invalid License!**"
-            color = discord.Color.red()
-    except Exception as e:
-        status_msg = f"❌ An error occurred: {str(e)}"
+    if api_data.get("success", False):
+        status_msg = "✅ **Valid License!**"
+        color = discord.Color.green()
+    else:
+        status_msg = "❌ **Invalid License!**"
         color = discord.Color.red()
 
     embed = discord.Embed(
@@ -201,7 +134,73 @@ async def testlicense(interaction: discord.Interaction, license_key: str):
     )
     embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
     await interaction.response.send_message(embed=embed)
+# Slash Command: Send Reset Embed (Admin Only)
+@bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
+@is_admin()
+async def sendresetembed(interaction: discord.Interaction, message: str):
+    guild_id = str(interaction.guild.id)
+    branding = get_branding(guild_id)
 
+    if guild_id not in data or "seller_key" not in data[guild_id]:
+        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title=f"🔄 License Key Reset - {branding}",
+        description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"© 2025 {branding} - License Reset System")
+
+    view = discord.ui.View()
+    
+    class ResetLicenseButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label="Reset License Key", style=discord.ButtonStyle.green)
+
+        async def callback(self, interaction: discord.Interaction):
+            modal = discord.ui.Modal(title="Enter Your License Key")
+            modal.add_item(discord.ui.TextInput(label="License Key", placeholder="Enter your license key here..."))
+
+            async def modal_callback(modal_interaction: discord.Interaction):
+                license_key = modal.children[0].value
+
+                # Call KeyAuth API
+                seller_key = data[guild_id]["seller_key"]
+                api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
+
+                response = requests.get(api_url, timeout=10)
+                api_data = response.json()
+
+                if api_data.get("success", False):
+                    reset_msg = f"✅ **License Key Reset Successfully!**\n🔑 **Key:** `{license_key}`"
+                    color = discord.Color.green()
+                    
+                    # DM the user
+                    try:
+                        await modal_interaction.user.send(f"✅ Your license key `{license_key}` has been successfully reset!")
+                    except discord.Forbidden:
+                        print(f"Could not DM {modal_interaction.user}")
+
+                else:
+                    reset_msg = "❌ **Failed to Reset License Key!**"
+                    color = discord.Color.red()
+
+                # Send response
+                result_embed = discord.Embed(
+                    title="🔄 License Reset Result",
+                    description=reset_msg,
+                    color=color
+                )
+                result_embed.set_footer(text=f"🚀 Powered by {branding}")
+                await modal_interaction.response.send_message(embed=result_embed, ephemeral=True)
+
+            modal.on_submit = modal_callback
+            await interaction.response.send_modal(modal)
+
+    view.add_item(ResetLicenseButton())
+
+    await interaction.channel.send(embed=embed, view=view)
 # Slash Command: API Status
 @bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
 async def apistatus(interaction: discord.Interaction):
