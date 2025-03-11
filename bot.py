@@ -144,9 +144,20 @@ class PersistentResetView(discord.ui.View):
         async def modal_callback(modal_interaction: discord.Interaction):
             license_key = modal.children[0].value
             guild_id = str(modal_interaction.guild.id)
-            seller_key = data[guild_id]["seller_key"]
-            api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
+            
+            # Check if Seller Key and Webhook are set
+            if guild_id not in data or "seller_key" not in data[guild_id]:
+                await modal_interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
+                return
+            
+            if guild_id not in data or "webhook_url" not in data[guild_id]:
+                await modal_interaction.response.send_message("⚠️ Webhook not set! Use `/setwebhook` first.", ephemeral=True)
+                return
 
+            seller_key = data[guild_id]["seller_key"]
+            webhook_url = data[guild_id]["webhook_url"]
+
+            api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
             response = requests.get(api_url, timeout=10)
             api_data = response.json()
 
@@ -154,10 +165,28 @@ class PersistentResetView(discord.ui.View):
                 reset_msg = f"✅ **License Key Reset Successfully!**\n🔑 **Key:** `{license_key}`"
                 color = discord.Color.green()
 
+                # DM the user
                 try:
                     await modal_interaction.user.send(f"✅ Your license key `{license_key}` has been successfully reset!")
                 except discord.Forbidden:
                     print(f"Could not DM {modal_interaction.user}")
+
+                # Send Webhook Log
+                log_embed = discord.Embed(
+                    title="📜 License Reset Log",
+                    description="A user has reset their license key.",
+                    color=discord.Color.blue()
+                )
+                log_embed.add_field(name="👤 User", value=f"{modal_interaction.user.mention} (`{modal_interaction.user.id}`)", inline=False)
+                log_embed.add_field(name="🔑 License Key", value=f"`{license_key}`", inline=False)
+                log_embed.add_field(name="⏳ Time", value=f"<t:{int(modal_interaction.created_at.timestamp())}:F>", inline=False)
+                log_embed.set_footer(text="🔒 Secure Logging")
+
+                webhook_data = {"embeds": [log_embed.to_dict()]}
+                try:
+                    requests.post(webhook_url, json=webhook_data)
+                except requests.exceptions.RequestException as e:
+                    print(f"❌ Webhook Error: {e}")
 
             else:
                 reset_msg = "❌ **Failed to Reset License Key!**"
@@ -173,7 +202,6 @@ class PersistentResetView(discord.ui.View):
 
         modal.on_submit = modal_callback
         await interaction.response.send_modal(modal)
-
 # Slash Command: API Status
 @bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
 async def apistatus(interaction: discord.Interaction):
