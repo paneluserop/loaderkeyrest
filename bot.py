@@ -19,17 +19,17 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# Database File for Storing Seller Keys & Webhooks
+# Database File for Storing Seller Keys, Webhooks, and Branding
 DATA_FILE = "data.json"
 
-# Load existing seller keys & webhooks from database file
+# Load existing seller keys, webhooks, and branding from database file
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     return {}
 
-# Save seller keys & webhooks to the database file
+# Save seller keys, webhooks, and branding to the database file
 def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
@@ -48,13 +48,31 @@ async def on_ready():
         print(f"❌ Error syncing commands: {e}")
 
     # Set Bot Status
-    await bot.change_presence(activity=discord.Game(name="Managing RAPIDFIRE CORPORATION 🔥"))
+    await bot.change_presence(activity=discord.Game(name="Managing Licensing System 🔥"))
+
+# Function to Get Custom Branding
+def get_branding(guild_id):
+    return data.get(str(guild_id), {}).get("branding", "RAPIDFIRE CORPORATION")
 
 # Admin-only check function
 def is_admin():
     async def predicate(interaction: discord.Interaction):
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
+
+# Slash Command to Check Bot Ping
+@bot.tree.command(name="ping", description="Check bot latency.")
+async def ping(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    branding = get_branding(interaction.guild.id)
+    
+    embed = discord.Embed(
+        title="🏓 Bot Latency",
+        description=f"📡 **Ping:** `{latency}ms`",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"🚀 Powered by {branding}")
+    await interaction.response.send_message(embed=embed)
 
 # Slash Command to Set Seller Key (Admin Only)
 @bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
@@ -64,12 +82,13 @@ async def setsellerkey(interaction: discord.Interaction, key: str):
     data[str(interaction.guild.id)]["seller_key"] = key
     save_data()
 
+    branding = get_branding(interaction.guild.id)
     embed = discord.Embed(
         title="🔑 Seller Key Updated",
         description="✅ **Seller Key has been successfully set for this server!**",
         color=discord.Color.green()
     )
-    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
+    embed.set_footer(text=f"🚀 Powered by {branding}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # Slash Command to Set Webhook (Admin Only)
@@ -80,12 +99,29 @@ async def setwebhook(interaction: discord.Interaction, url: str):
     data[str(interaction.guild.id)]["webhook_url"] = url
     save_data()
 
+    branding = get_branding(interaction.guild.id)
     embed = discord.Embed(
         title="🌐 Webhook Set",
         description="✅ **Webhook has been successfully set for logging resets!**",
         color=discord.Color.green()
     )
-    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
+    embed.set_footer(text=f"🚀 Powered by {branding}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# Slash Command to Change Branding (Admin Only)
+@bot.tree.command(name="setbranding", description="Change the branding for this server.")
+@is_admin()
+async def setbranding(interaction: discord.Interaction, name: str):
+    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
+    data[str(interaction.guild.id)]["branding"] = name
+    save_data()
+
+    embed = discord.Embed(
+        title="🚀 Branding Updated",
+        description=f"✅ **All bot responses will now display:** `{name}`",
+        color=discord.Color.orange()
+    )
+    embed.set_footer(text=f"🚀 Powered by {name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # Slash Command to Send Reset Embed (Anonymous & Lifetime)
@@ -93,20 +129,21 @@ async def setwebhook(interaction: discord.Interaction, url: str):
 @is_admin()
 async def sendresetembed(interaction: discord.Interaction, message: str):
     guild_id = str(interaction.guild.id)
+    branding = get_branding(guild_id)
+
     if guild_id not in data or "seller_key" not in data[guild_id]:
         await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
         return
 
     embed = discord.Embed(
-        title="🔄 License Key Reset - RAPIDFIRE CORPORATION",
+        title=f"🔄 License Key Reset - {branding}",
         description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
         color=discord.Color.blue()
     )
-    embed.set_footer(text="© 2025 RAPIDFIRE CORPORATION - License Reset System")
+    embed.set_footer(text=f"© 2025 {branding} - License Reset System")
 
     view = ResetButton()
 
-    # Delete the original command message and send a new embed in the channel
     await interaction.response.defer(ephemeral=True)
     channel = interaction.channel
     await channel.send(embed=embed, view=view)
@@ -120,55 +157,5 @@ class ResetButton(discord.ui.View):
     async def reset_license(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = LicenseResetModal(interaction)
         await interaction.response.send_modal(modal)
-
-# Modal Input Box for License Key
-class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
-    license_key = TextInput(label="License Key", placeholder="Enter your license key here", required=True)
-
-    def __init__(self, interaction):
-        super().__init__()
-        self.interaction = interaction
-
-    async def on_submit(self, interaction: discord.Interaction):
-        license_key = self.license_key.value.strip()
-        guild_id = str(interaction.guild.id)
-
-        if guild_id not in data or "seller_key" not in data[guild_id]:
-            embed = discord.Embed(
-                title="⚠️ Error",
-                description="⚠️ **Seller Key is not set! Use `/setsellerkey` first.**",
-                color=discord.Color.red()
-            )
-            embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        seller_key = data[guild_id]["seller_key"]
-        api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
-
-        response = requests.get(api_url, timeout=10)
-        api_data = response.json()
-
-        embed_color = discord.Color.green() if api_data.get("success", False) else discord.Color.red()
-        result_message = "✅ **License successfully reset!**" if api_data.get("success", False) else f"❌ **License reset failed!**\n**Reason:** {api_data.get('message', 'Unknown Error')}"
-
-        embed = discord.Embed(title="🔄 License Reset Result", description=result_message, color=embed_color)
-        embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # 🔹 FIX: Proper Webhook Logging
-        if "webhook_url" in data[guild_id]:
-            webhook_url = data[guild_id]["webhook_url"]
-
-            log_embed = discord.Embed(
-                title="🔄 License Key Reset Logged",
-                color=embed_color
-            )
-            log_embed.add_field(name="🔑 License Key:", value=f"||{license_key}||", inline=False)
-            log_embed.add_field(name="👤 User:", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
-            log_embed.add_field(name="⏳ Timestamp:", value=f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", inline=False)
-            log_embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
-
-            requests.post(webhook_url, json={"embeds": [log_embed.to_dict()]})
 
 bot.run(BOT_TOKEN)
