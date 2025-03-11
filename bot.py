@@ -4,9 +4,7 @@ import discord
 import requests
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import Modal, TextInput
 from dotenv import load_dotenv
-from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -61,7 +59,23 @@ def is_admin():
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
 
-# Slash Command: Ping (Visible only to the user)
+# Slash Command: Set Branding
+@bot.tree.command(name="setbranding", description="Change the branding for this server.")
+@is_admin()
+async def setbranding(interaction: discord.Interaction, name: str):
+    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
+    data[str(interaction.guild.id)]["branding"] = name
+    save_data()
+
+    embed = discord.Embed(
+        title="🚀 Branding Updated",
+        description=f"✅ **All bot responses will now display:** `{name}`",
+        color=discord.Color.orange()
+    )
+    embed.set_footer(text=f"🚀 Powered by {name}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# Slash Command: Ping
 @bot.tree.command(name="ping", description="Check bot latency.")
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
@@ -69,47 +83,13 @@ async def ping(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🏓 Bot Latency",
-        description=f"📡 **Current Ping:** `{latency}ms`",
+        description=f"📡 **Ping:** `{latency}ms`",
         color=discord.Color.blue()
     )
     embed.set_footer(text=f"🚀 Powered by {branding}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Slash Command: Set Seller Key (Admins only)
-@bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
-@is_admin()
-async def setsellerkey(interaction: discord.Interaction, key: str):
-    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
-    data[str(interaction.guild.id)]["seller_key"] = key
-    save_data()
-
-    branding = get_branding(interaction.guild.id)
-    embed = discord.Embed(
-        title="🔑 Seller Key Updated",
-        description="✅ **Your server's seller key has been set successfully!**",
-        color=discord.Color.green()
-    )
-    embed.set_footer(text=f"🚀 Powered by {branding}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# Slash Command: Set Webhook (Admins only)
-@bot.tree.command(name="setwebhook", description="Set the webhook URL for logging resets.")
-@is_admin()
-async def setwebhook(interaction: discord.Interaction, url: str):
-    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
-    data[str(interaction.guild.id)]["webhook_url"] = url
-    save_data()
-
-    branding = get_branding(interaction.guild.id)
-    embed = discord.Embed(
-        title="🌐 Webhook Set",
-        description="✅ **Your webhook for logging resets has been updated!**",
-        color=discord.Color.green()
-    )
-    embed.set_footer(text=f"🚀 Powered by {branding}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# Slash Command: API Status (Visible only to the user)
+# Slash Command: API Status
 @bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
 async def apistatus(interaction: discord.Interaction):
     api_url = "https://keyauth.win/api/seller/"
@@ -133,7 +113,7 @@ async def apistatus(interaction: discord.Interaction):
     embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Slash Command: Help Menu (Visible only to the user)
+# Slash Command: Help Menu
 @bot.tree.command(name="help", description="View all available bot commands.")
 async def help_command(interaction: discord.Interaction):
     branding = get_branding(interaction.guild.id)
@@ -148,10 +128,11 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🌐 `/setwebhook <url>`", value="Set the webhook URL for logs (Admin Only).", inline=False)
     embed.add_field(name="📡 `/apistatus`", value="Check if KeyAuth API is online.", inline=False)
     embed.add_field(name="🔍 `/testlicense <license>`", value="Check if a license key is valid **without resetting**.", inline=False)
+    embed.add_field(name="🚀 `/setbranding <name>`", value="Change bot branding for the server (Admin Only).", inline=False)
     embed.set_footer(text=f"🚀 Powered by {branding}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Slash Command: Send Reset Embed (Admins only)
+# Slash Command: Send Reset Embed
 @bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
 @is_admin()
 async def sendresetembed(interaction: discord.Interaction, message: str):
