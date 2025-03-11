@@ -83,11 +83,11 @@ async def ping(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🏓 Bot Latency",
-        description=f"📡 **Ping:** `{latency}ms`",
+        description=f"📡 **Current Ping:** `{latency}ms`",
         color=discord.Color.blue()
     )
     embed.set_footer(text=f"🚀 Powered by {branding}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
 # Slash Command: API Status
 @bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
@@ -111,9 +111,38 @@ async def apistatus(interaction: discord.Interaction):
         color=color
     )
     embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
-# Slash Command: Help Menu
+# Slash Command: Test License
+@bot.tree.command(name="testlicense", description="Check if a license key is valid without resetting it.")
+async def testlicense(interaction: discord.Interaction, license_key: str):
+    guild_id = str(interaction.guild.id)
+    if guild_id not in data or "seller_key" not in data[guild_id]:
+        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
+        return
+
+    seller_key = data[guild_id]["seller_key"]
+    api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=userdata&user={license_key}"
+
+    response = requests.get(api_url, timeout=10)
+    api_data = response.json()
+
+    if api_data.get("success", False):
+        status_msg = "✅ **Valid License!**"
+        color = discord.Color.green()
+    else:
+        status_msg = "❌ **Invalid License!**"
+        color = discord.Color.red()
+
+    embed = discord.Embed(
+        title="🔍 License Check Result",
+        description=status_msg,
+        color=color
+    )
+    embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
+    await interaction.response.send_message(embed=embed)
+
+# Slash Command: Help
 @bot.tree.command(name="help", description="View all available bot commands.")
 async def help_command(interaction: discord.Interaction):
     branding = get_branding(interaction.guild.id)
@@ -126,11 +155,11 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🔄 `/sendresetembed <message>`", value="Send a reset embed for users.", inline=False)
     embed.add_field(name="🔑 `/setsellerkey <key>`", value="Set the KeyAuth seller key for this server (Admin Only).", inline=False)
     embed.add_field(name="🌐 `/setwebhook <url>`", value="Set the webhook URL for logs (Admin Only).", inline=False)
+    embed.add_field(name="🚀 `/setbranding <name>`", value="Change bot branding for the server (Admin Only).", inline=False)
     embed.add_field(name="📡 `/apistatus`", value="Check if KeyAuth API is online.", inline=False)
     embed.add_field(name="🔍 `/testlicense <license>`", value="Check if a license key is valid **without resetting**.", inline=False)
-    embed.add_field(name="🚀 `/setbranding <name>`", value="Change bot branding for the server (Admin Only).", inline=False)
     embed.set_footer(text=f"🚀 Powered by {branding}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
 # Slash Command: Send Reset Embed
 @bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
