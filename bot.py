@@ -61,6 +61,54 @@ def is_admin():
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
 
+# Slash Command: Ping
+@bot.tree.command(name="ping", description="Check bot latency.")
+async def ping(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    branding = get_branding(interaction.guild.id)
+    
+    embed = discord.Embed(
+        title="🏓 Bot Latency",
+        description=f"📡 **Ping:** `{latency}ms`",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"🚀 Powered by {branding}")
+    await interaction.response.send_message(embed=embed)
+
+# Slash Command: Set Seller Key
+@bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
+@is_admin()
+async def setsellerkey(interaction: discord.Interaction, key: str):
+    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
+    data[str(interaction.guild.id)]["seller_key"] = key
+    save_data()
+
+    branding = get_branding(interaction.guild.id)
+    embed = discord.Embed(
+        title="🔑 Seller Key Updated",
+        description="✅ **Seller Key has been successfully set for this server!**",
+        color=discord.Color.green()
+    )
+    embed.set_footer(text=f"🚀 Powered by {branding}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# Slash Command: Set Webhook
+@bot.tree.command(name="setwebhook", description="Set the webhook URL for logging resets.")
+@is_admin()
+async def setwebhook(interaction: discord.Interaction, url: str):
+    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
+    data[str(interaction.guild.id)]["webhook_url"] = url
+    save_data()
+
+    branding = get_branding(interaction.guild.id)
+    embed = discord.Embed(
+        title="🌐 Webhook Set",
+        description="✅ **Webhook has been successfully set for logging resets!**",
+        color=discord.Color.green()
+    )
+    embed.set_footer(text=f"🚀 Powered by {branding}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 # Slash Command: Set Branding
 @bot.tree.command(name="setbranding", description="Change the branding for this server.")
 @is_admin()
@@ -77,7 +125,7 @@ async def setbranding(interaction: discord.Interaction, name: str):
     embed.set_footer(text=f"🚀 Powered by {name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Slash Command: Help Menu (Lists all commands)
+# Slash Command: Help Menu
 @bot.tree.command(name="help", description="View all available bot commands.")
 async def help_command(interaction: discord.Interaction):
     branding = get_branding(interaction.guild.id)
@@ -94,35 +142,6 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text=f"🚀 Powered by {branding}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Slash Command: Test License Validity (Without Resetting)
-@bot.tree.command(name="testlicense", description="Check if a license key is valid without resetting it.")
-async def testlicense(interaction: discord.Interaction, license_key: str):
-    guild_id = str(interaction.guild.id)
-    if guild_id not in data or "seller_key" not in data[guild_id]:
-        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
-        return
-
-    seller_key = data[guild_id]["seller_key"]
-    api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=userdata&user={license_key}"
-
-    response = requests.get(api_url, timeout=10)
-    api_data = response.json()
-
-    if api_data.get("success", False):
-        status_msg = "✅ **Valid License!**"
-        color = discord.Color.green()
-    else:
-        status_msg = "❌ **Invalid License!**"
-        color = discord.Color.red()
-
-    embed = discord.Embed(
-        title="🔍 License Check Result",
-        description=status_msg,
-        color=color
-    )
-    embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
-    await interaction.response.send_message(embed=embed)
-
 # Send DM Notification After Reset
 async def send_dm(user, license_key, guild_id):
     branding = get_branding(guild_id)
@@ -137,7 +156,7 @@ async def send_dm(user, license_key, guild_id):
     except:
         print(f"❌ Could not send DM to {user}")
 
-# Slash Command to Send Reset Embed (Anonymous & Lifetime)
+# Slash Command to Send Reset Embed
 @bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
 @is_admin()
 async def sendresetembed(interaction: discord.Interaction, message: str):
@@ -181,6 +200,6 @@ class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
     async def on_submit(self, interaction: discord.Interaction):
         license_key = self.license_key.value.strip()
         guild_id = str(interaction.guild.id)
-        await send_dm(interaction.user, license_key, guild_id)  # Send DM Confirmation
+        await send_dm(interaction.user, license_key, guild_id)
 
 bot.run(BOT_TOKEN)
