@@ -71,7 +71,7 @@ async def sendresetembed(interaction: discord.Interaction, message: str):
         return
 
     embed = discord.Embed(
-        title="🔄 License Key Reset",
+        title="🔄 License Key Reset - RAPIDFIRE CORP",
         description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
         color=discord.Color.blue()
     )
@@ -90,34 +90,44 @@ class LicenseResetModal(Modal, title="Enter Your License Key"):
 
     async def on_submit(self, interaction: discord.Interaction):
         license_key = self.license_key.value.strip()
-
         seller_key = seller_keys.get(interaction.guild.id)
+
         if not seller_key:
             await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
             return
 
+        # Send request to KeyAuth API
         api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
-        response = requests.get(api_url)
+        try:
+            response = requests.get(api_url, timeout=10)
+            api_data = response.json()
 
-        if response.status_code == 200 and response.json().get("success"):
-            await interaction.response.send_message(f"✅ License **{license_key}** has been reset!", ephemeral=True)
+            if response.status_code == 200 and api_data.get("success", False):
+                result_message = f"✅ License **{license_key}** has been successfully reset!"
+                embed_color = discord.Color.green()
+            else:
+                result_message = f"❌ License reset failed! Reason: {api_data.get('message', 'Unknown Error')}"
+                embed_color = discord.Color.red()
 
-            # Log the reset to webhook
-            webhook_url = webhook_urls.get(interaction.guild.id)
-            if webhook_url:
-                log_embed = discord.Embed(
-                    title="🔄 KeyAuth License Reset Logged",
-                    color=discord.Color.green()
-                )
-                log_embed.add_field(name="🔑 License Key:", value=f"||{license_key}||", inline=False)
-                log_embed.add_field(name="👤 User:", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
-                log_embed.add_field(name="⏳ Timestamp:", value=f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", inline=False)
-                log_embed.set_footer(text="© 2025 RAPIDFIRE CORP - Auto Log System")
+        except requests.RequestException as e:
+            result_message = "⚠️ Error contacting KeyAuth API. Please try again later."
+            embed_color = discord.Color.orange()
 
-                requests.post(webhook_url, json={"embeds": [log_embed.to_dict()]})
+        await interaction.response.send_message(result_message, ephemeral=True)
 
-        else:
-            await interaction.response.send_message("❌ Failed to reset the key. Check your input.", ephemeral=True)
+        # Send reset log to webhook (if set)
+        webhook_url = webhook_urls.get(interaction.guild.id)
+        if webhook_url:
+            log_embed = discord.Embed(
+                title="🔄 KeyAuth License Reset Logged",
+                color=embed_color
+            )
+            log_embed.add_field(name="🔑 License Key:", value=f"||{license_key}||", inline=False)
+            log_embed.add_field(name="👤 User:", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
+            log_embed.add_field(name="⏳ Timestamp:", value=f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", inline=False)
+            log_embed.set_footer(text="© 2025 RAPIDFIRE CORP - Auto Log System")
+
+            requests.post(webhook_url, json={"embeds": [log_embed.to_dict()]})
 
 # Button Handling for License Reset
 class ResetButton(discord.ui.View):
