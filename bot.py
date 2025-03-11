@@ -46,6 +46,9 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Error syncing commands: {e}")
 
+    # Register the persistent view
+    bot.add_view(PersistentResetView())
+
     # Set Bot Status
     await bot.change_presence(activity=discord.Game(name="Managing Licensing System 🔥"))
 
@@ -58,6 +61,7 @@ def is_admin():
     async def predicate(interaction: discord.Interaction):
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
+
 # Slash Command: Set Seller Key
 @bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
 @is_admin()
@@ -106,6 +110,93 @@ async def setbranding(interaction: discord.Interaction, name: str):
     embed.set_footer(text=f"🚀 Powered by {name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+# Slash Command: Send Reset Embed
+@bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
+@is_admin()
+async def sendresetembed(interaction: discord.Interaction, message: str):
+    guild_id = str(interaction.guild.id)
+    branding = get_branding(guild_id)
+
+    if guild_id not in data or "seller_key" not in data[guild_id]:
+        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title=f"🔄 License Key Reset - {branding}",
+        description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"© 2025 {branding} - License Reset System")
+
+    view = PersistentResetView()
+    await interaction.channel.send(embed=embed, view=view)
+
+# Persistent View for Reset Button
+class PersistentResetView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # View never expires
+
+    @discord.ui.button(label="Reset License Key", style=discord.ButtonStyle.green)
+    async def reset_license(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = discord.ui.Modal(title="Enter Your License Key")
+        modal.add_item(discord.ui.TextInput(label="License Key", placeholder="Enter your license key here..."))
+
+        async def modal_callback(modal_interaction: discord.Interaction):
+            license_key = modal.children[0].value
+            guild_id = str(modal_interaction.guild.id)
+            seller_key = data[guild_id]["seller_key"]
+            api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
+
+            response = requests.get(api_url, timeout=10)
+            api_data = response.json()
+
+            if api_data.get("success", False):
+                reset_msg = f"✅ **License Key Reset Successfully!**\n🔑 **Key:** `{license_key}`"
+                color = discord.Color.green()
+
+                try:
+                    await modal_interaction.user.send(f"✅ Your license key `{license_key}` has been successfully reset!")
+                except discord.Forbidden:
+                    print(f"Could not DM {modal_interaction.user}")
+
+            else:
+                reset_msg = "❌ **Failed to Reset License Key!**"
+                color = discord.Color.red()
+
+            result_embed = discord.Embed(
+                title="🔄 License Reset Result",
+                description=reset_msg,
+                color=color
+            )
+            result_embed.set_footer(text=f"🚀 Powered by {get_branding(guild_id)}")
+            await modal_interaction.response.send_message(embed=result_embed, ephemeral=True)
+
+        modal.on_submit = modal_callback
+        await interaction.response.send_modal(modal)
+
+# Slash Command: API Status
+@bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
+async def apistatus(interaction: discord.Interaction):
+    api_url = "https://keyauth.win/api/seller/"
+    try:
+        response = requests.get(api_url, timeout=10)
+        if response.status_code == 200:
+            status_msg = "✅ **KeyAuth API is Online!**"
+            color = discord.Color.green()
+        else:
+            status_msg = "⚠️ **KeyAuth API is having issues!**"
+            color = discord.Color.orange()
+    except requests.RequestException:
+        status_msg = "❌ **KeyAuth API is Down!**"
+        color = discord.Color.red()
+
+    embed = discord.Embed(
+        title="📡 KeyAuth API Status",
+        description=status_msg,
+        color=color
+    )
+    embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
+    await interaction.response.send_message(embed=embed)
 # Slash Command: Test License
 @bot.tree.command(name="testlicense", description="Check if a license key is valid without resetting it.")
 async def testlicense(interaction: discord.Interaction, license_key: str):
@@ -134,124 +225,6 @@ async def testlicense(interaction: discord.Interaction, license_key: str):
     )
     embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
     await interaction.response.send_message(embed=embed)
-# Slash Command: Send Reset Embed (Admin Only)
-@bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
-@is_admin()
-async def sendresetembed(interaction: discord.Interaction, message: str):
-    guild_id = str(interaction.guild.id)
-    branding = get_branding(guild_id)
-
-    if guild_id not in data or "seller_key" not in data[guild_id]:
-        await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
-        return
-
-    if guild_id not in data or "webhook_url" not in data[guild_id]:
-        await interaction.response.send_message("⚠️ Webhook not set! Use `/setwebhook` first.", ephemeral=True)
-        return
-
-    webhook_url = data[guild_id]["webhook_url"]
-
-    embed = discord.Embed(
-        title=f"🔄 License Key Reset - {branding}",
-        description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"© 2025 {branding} - License Reset System")
-
-    view = discord.ui.View()
-    
-    class ResetLicenseButton(discord.ui.Button):
-        def __init__(self):
-            super().__init__(label="Reset License Key", style=discord.ButtonStyle.green)
-
-        async def callback(self, interaction: discord.Interaction):
-            modal = discord.ui.Modal(title="Enter Your License Key")
-            modal.add_item(discord.ui.TextInput(label="License Key", placeholder="Enter your license key here..."))
-
-            async def modal_callback(modal_interaction: discord.Interaction):
-                license_key = modal.children[0].value
-
-                # Call KeyAuth API
-                seller_key = data[guild_id]["seller_key"]
-                api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
-
-                response = requests.get(api_url, timeout=10)
-                api_data = response.json()
-
-                if api_data.get("success", False):
-                    reset_msg = f"✅ **License Key Reset Successfully!**\n🔑 **Key:** `{license_key}`"
-                    color = discord.Color.green()
-
-                    # DM the user
-                    try:
-                        await modal_interaction.user.send(f"✅ Your license key `{license_key}` has been successfully reset!")
-                    except discord.Forbidden:
-                        print(f"Could not DM {modal_interaction.user}")
-
-                    # Send Webhook Log
-                    log_embed = discord.Embed(
-                        title="📜 License Reset Log",
-                        description="A user has reset their license key.",
-                        color=discord.Color.blue()
-                    )
-                    log_embed.add_field(name="👤 User", value=f"{modal_interaction.user.mention} (`{modal_interaction.user.id}`)", inline=False)
-                    log_embed.add_field(name="🔑 License Key", value=f"`{license_key}`", inline=False)
-                    log_embed.add_field(name="⏳ Time", value=f"<t:{int(modal_interaction.created_at.timestamp())}:F>", inline=False)
-                    log_embed.set_footer(text="🔒 Secure Logging")
-
-                    webhook_data = {
-                        "embeds": [log_embed.to_dict()]
-                    }
-
-                    try:
-                        requests.post(webhook_url, json=webhook_data)
-                    except requests.exceptions.RequestException as e:
-                        print(f"❌ Webhook Error: {e}")
-
-                else:
-                    reset_msg = "❌ **Failed to Reset License Key!**"
-                    color = discord.Color.red()
-
-                # Send response
-                result_embed = discord.Embed(
-                    title="🔄 License Reset Result",
-                    description=reset_msg,
-                    color=color
-                )
-                result_embed.set_footer(text=f"🚀 Powered by {branding}")
-                await modal_interaction.response.send_message(embed=result_embed, ephemeral=True)
-
-            modal.on_submit = modal_callback
-            await interaction.response.send_modal(modal)
-
-    view.add_item(ResetLicenseButton())
-
-    await interaction.channel.send(embed=embed, view=view)
-
-# Slash Command: API Status
-@bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
-async def apistatus(interaction: discord.Interaction):
-    api_url = "https://keyauth.win/api/seller/"
-    try:
-        response = requests.get(api_url, timeout=10)
-        if response.status_code == 200:
-            status_msg = "✅ **KeyAuth API is Online!**"
-            color = discord.Color.green()
-        else:
-            status_msg = "⚠️ **KeyAuth API is having issues!**"
-            color = discord.Color.orange()
-    except requests.RequestException:
-        status_msg = "❌ **KeyAuth API is Down!**"
-        color = discord.Color.red()
-
-    embed = discord.Embed(
-        title="📡 KeyAuth API Status",
-        description=status_msg,
-        color=color
-    )
-    embed.set_footer(text=f"🚀 Powered by {get_branding(interaction.guild.id)}")
-    await interaction.response.send_message(embed=embed)
-
 # Slash Command: Ping
 @bot.tree.command(name="ping", description="Check bot latency.")
 async def ping(interaction: discord.Interaction):
@@ -284,5 +257,6 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🔄 `/sendresetembed <message>`", value="Send a reset embed for users (Admin Only).", inline=False)
     embed.set_footer(text=f"🚀 Powered by {branding}")
     await interaction.response.send_message(embed=embed)
-
+    
+# Run Bot
 bot.run(BOT_TOKEN)
