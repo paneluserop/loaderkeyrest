@@ -4,6 +4,7 @@ import requests
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables from .env
 load_dotenv()
@@ -17,8 +18,9 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# Dictionary to store seller keys per server
+# Dictionary to store seller keys and webhook URLs per server
 seller_keys = {}
+webhook_urls = {}
 
 @bot.event
 async def on_ready():
@@ -39,12 +41,25 @@ def is_admin():
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
 
+# Slash Command to Check Bot Ping
+@bot.tree.command(name="ping", description="Check bot latency.")
+async def ping(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    await interaction.response.send_message(f"🏓 Pong! Bot latency is `{latency}ms`.")
+
 # Slash Command to Set Seller Key (Admin Only)
 @bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
 @is_admin()
 async def setsellerkey(interaction: discord.Interaction, key: str):
     seller_keys[interaction.guild.id] = key
     await interaction.response.send_message("✅ Seller Key set successfully for this server!", ephemeral=True)
+
+# Slash Command to Set Webhook (Admin Only)
+@bot.tree.command(name="setwebhook", description="Set the webhook URL for logging resets.")
+@is_admin()
+async def setwebhook(interaction: discord.Interaction, url: str):
+    webhook_urls[interaction.guild.id] = url
+    await interaction.response.send_message("✅ Webhook set successfully for this server!", ephemeral=True)
 
 # Slash Command to Send Reset Embed (Admin Only)
 @bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
@@ -90,9 +105,24 @@ class ResetButton(discord.ui.View):
 
             if response.status_code == 200 and response.json().get("success"):
                 await interaction.followup.send(f"✅ License **{license_key}** has been reset!", ephemeral=True)
+
+                # Log the reset to webhook
+                webhook_url = webhook_urls.get(interaction.guild.id)
+                if webhook_url:
+                    log_embed = discord.Embed(
+                        title="🔄 KeyAuth License Reset Logged",
+                        color=discord.Color.green()
+                    )
+                    log_embed.add_field(name="🔑 License Key:", value=f"||{license_key}||", inline=False)
+                    log_embed.add_field(name="👤 User:", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
+                    log_embed.add_field(name="⏳ Timestamp:", value=f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", inline=False)
+                    log_embed.set_footer(text="© 2025 RAPIDFIRE - Auto Log System")
+
+                    requests.post(webhook_url, json={"embeds": [log_embed.to_dict()]})
+
             else:
                 await interaction.followup.send("❌ Failed to reset the key. Check your input.", ephemeral=True)
-            
+
             await msg.delete()
 
         except Exception as e:
