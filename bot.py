@@ -66,17 +66,20 @@ async def reset_license(interaction: discord.Interaction, license_key: str):
     seller_key = data[guild_id]["seller_key"]
     api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=reset&user={license_key}"
 
-    response = requests.get(api_url, timeout=10)
-    api_data = response.json()
+    try:
+        response = requests.get(api_url, timeout=10)
+        api_data = response.json()
 
-    if api_data.get("success", False):
-        await interaction.user.send(f"✅ Your license key `{license_key}` has been reset successfully!")
-        # Log to webhook if set
-        webhook_url = data[guild_id].get("webhook_url")
-        if webhook_url:
-            requests.post(webhook_url, json={"content": f"License key `{license_key}` has been reset by {interaction.user.name}."})
-    else:
-        await interaction.user.send(f"❌ Failed to reset your license key `{license_key}`. Please check the key and try again.")
+        if api_data.get("success", False):
+            await interaction.user.send(f"✅ Your license key `{license_key}` has been reset successfully!")
+            # Log to webhook if set
+            webhook_url = data[guild_id].get("webhook_url")
+            if webhook_url:
+                requests.post(webhook_url, json={"content": f"License key `{license_key}` has been reset by {interaction.user.name}."})
+        else:
+            await interaction.user.send(f"❌ Failed to reset your license key `{license_key}`. Please check the key and try again.")
+    except Exception as e:
+        await interaction.user.send(f"❌ An error occurred while resetting the license: {str(e)}")
 
 # Modal for License Key Input
 class LicenseKeyModal(Modal):
@@ -177,14 +180,18 @@ async def testlicense(interaction: discord.Interaction, license_key: str):
     seller_key = data[guild_id]["seller_key"]
     api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=userdata&user={license_key}"
 
-    response = requests.get(api_url, timeout=10)
-    api_data = response.json()
+    try:
+        response = requests.get(api_url, timeout=10)
+        api_data = response.json()
 
-    if api_data.get("success", False):
-        status_msg = "✅ **Valid License!**"
-        color = discord.Color.green()
-    else:
-        status_msg = "❌ **Invalid License!**"
+        if api_data.get("success", False):
+            status_msg = "✅ **Valid License!**"
+            color = discord.Color.green()
+        else:
+            status_msg = "❌ **Invalid License!**"
+            color = discord.Color.red()
+    except Exception as e:
+        status_msg = f"❌ An error occurred: {str(e)}"
         color = discord.Color.red()
 
     embed = discord.Embed(
