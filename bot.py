@@ -145,6 +145,12 @@ async def sendresetembed(interaction: discord.Interaction, message: str):
         await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
         return
 
+    if guild_id not in data or "webhook_url" not in data[guild_id]:
+        await interaction.response.send_message("⚠️ Webhook not set! Use `/setwebhook` first.", ephemeral=True)
+        return
+
+    webhook_url = data[guild_id]["webhook_url"]
+
     embed = discord.Embed(
         title=f"🔄 License Key Reset - {branding}",
         description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
@@ -175,12 +181,32 @@ async def sendresetembed(interaction: discord.Interaction, message: str):
                 if api_data.get("success", False):
                     reset_msg = f"✅ **License Key Reset Successfully!**\n🔑 **Key:** `{license_key}`"
                     color = discord.Color.green()
-                    
+
                     # DM the user
                     try:
                         await modal_interaction.user.send(f"✅ Your license key `{license_key}` has been successfully reset!")
                     except discord.Forbidden:
                         print(f"Could not DM {modal_interaction.user}")
+
+                    # Send Webhook Log
+                    log_embed = discord.Embed(
+                        title="📜 License Reset Log",
+                        description="A user has reset their license key.",
+                        color=discord.Color.blue()
+                    )
+                    log_embed.add_field(name="👤 User", value=f"{modal_interaction.user.mention} (`{modal_interaction.user.id}`)", inline=False)
+                    log_embed.add_field(name="🔑 License Key", value=f"`{license_key}`", inline=False)
+                    log_embed.add_field(name="⏳ Time", value=f"<t:{int(modal_interaction.created_at.timestamp())}:F>", inline=False)
+                    log_embed.set_footer(text="🔒 Secure Logging")
+
+                    webhook_data = {
+                        "embeds": [log_embed.to_dict()]
+                    }
+
+                    try:
+                        requests.post(webhook_url, json=webhook_data)
+                    except requests.exceptions.RequestException as e:
+                        print(f"❌ Webhook Error: {e}")
 
                 else:
                     reset_msg = "❌ **Failed to Reset License Key!**"
@@ -201,6 +227,7 @@ async def sendresetembed(interaction: discord.Interaction, message: str):
     view.add_item(ResetLicenseButton())
 
     await interaction.channel.send(embed=embed, view=view)
+
 # Slash Command: API Status
 @bot.tree.command(name="apistatus", description="Check if KeyAuth API is online.")
 async def apistatus(interaction: discord.Interaction):
