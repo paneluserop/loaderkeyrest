@@ -1,4 +1,5 @@
 import os
+import json
 import discord
 import requests
 from discord.ext import commands
@@ -7,9 +8,8 @@ from discord.ui import Modal, TextInput
 from dotenv import load_dotenv
 from datetime import datetime
 
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Intents
@@ -19,9 +19,23 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# Dictionary to store seller keys and webhook URLs per server
-seller_keys = {}
-webhook_urls = {}
+# Database File for Storing Seller Keys & Webhooks
+DATA_FILE = "data.json"
+
+# Load existing seller keys & webhooks from database file
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+# Save seller keys & webhooks to the database file
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+# Load data at startup
+data = load_data()
 
 @bot.event
 async def on_ready():
@@ -34,7 +48,7 @@ async def on_ready():
         print(f"❌ Error syncing commands: {e}")
 
     # Set Bot Status
-    await bot.change_presence(activity=discord.Game(name="Managing Rapid Loader 🔥"))
+    await bot.change_presence(activity=discord.Game(name="MANAGING RAPIDFIRE LOADER 🔥"))
 
 # Admin-only check function
 def is_admin():
@@ -47,56 +61,72 @@ def is_admin():
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
     embed = discord.Embed(
-        title="🏓 Bot Ping",
-        description=f"📡 Bot latency: `{latency}ms`",
+        title="🏓 Bot Latency",
+        description=f"📡 **Ping:** `{latency}ms`",
         color=discord.Color.blue()
     )
-    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORP")
+    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
     await interaction.response.send_message(embed=embed)
 
 # Slash Command to Set Seller Key (Admin Only)
 @bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
 @is_admin()
 async def setsellerkey(interaction: discord.Interaction, key: str):
-    seller_keys[interaction.guild.id] = key
+    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
+    data[str(interaction.guild.id)]["seller_key"] = key
+    save_data()
+
     embed = discord.Embed(
         title="🔑 Seller Key Updated",
         description="✅ **Seller Key has been successfully set for this server!**",
         color=discord.Color.green()
     )
-    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORP")
+    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # Slash Command to Set Webhook (Admin Only)
 @bot.tree.command(name="setwebhook", description="Set the webhook URL for logging resets.")
 @is_admin()
 async def setwebhook(interaction: discord.Interaction, url: str):
-    webhook_urls[interaction.guild.id] = url
+    data[str(interaction.guild.id)] = data.get(str(interaction.guild.id), {})
+    data[str(interaction.guild.id)]["webhook_url"] = url
+    save_data()
+
     embed = discord.Embed(
         title="🌐 Webhook Set",
         description="✅ **Webhook has been successfully set for logging resets!**",
         color=discord.Color.green()
     )
-    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORP")
+    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # Slash Command to Send Reset Embed (Admin Only)
 @bot.tree.command(name="sendresetembed", description="Send an embed for users to reset their license keys.")
 @is_admin()
 async def sendresetembed(interaction: discord.Interaction, message: str):
-    if interaction.guild.id not in seller_keys:
+    if str(interaction.guild.id) not in data or "seller_key" not in data[str(interaction.guild.id)]:
         await interaction.response.send_message("⚠️ Seller Key not set! Use `/setsellerkey` first.", ephemeral=True)
         return
 
     embed = discord.Embed(
-        title="🔄 License Key Reset - RAPIDFIRE CORP",
+        title="🔄 License Key Reset - RAPIDFIRE CORPORATION",
         description=f"{message}\n\nClick the button below to reset your KeyAuth license key.\n\n**@everyone**",
         color=discord.Color.blue()
     )
-    embed.set_footer(text="© 2025 RAPIDFIRE CORP - License Reset System")
+    embed.set_footer(text="© 2025 RAPIDFIRE CORPORATION - License Reset System")
 
     view = ResetButton()
     await interaction.response.send_message("@everyone", embed=embed, view=view)
+
+# Button Handling for License Reset
+class ResetButton(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+
+    @discord.ui.button(label="🔑 Reset License", style=discord.ButtonStyle.success, custom_id="reset_license")
+    async def reset_license(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = LicenseResetModal(interaction)
+        await interaction.response.send_modal(modal)
 
 # Modal Input Box for License Key
 class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
@@ -108,20 +138,21 @@ class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
 
     async def on_submit(self, interaction: discord.Interaction):
         license_key = self.license_key.value.strip()
-        seller_key = seller_keys.get(interaction.guild.id)
+        guild_id = str(interaction.guild.id)
 
-        if not seller_key:
+        if guild_id not in data or "seller_key" not in data[guild_id]:
             embed = discord.Embed(
                 title="⚠️ Error",
                 description="⚠️ **Seller Key is not set! Use `/setsellerkey` first.**",
                 color=discord.Color.red()
             )
-            embed.set_footer(text="🚀 Powered by RAPIDFIRE CORP")
+            embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Send request to KeyAuth API
+        seller_key = data[guild_id]["seller_key"]
         api_url = f"https://keyauth.win/api/seller/?sellerkey={seller_key}&type=resetuser&user={license_key}"
+
         try:
             response = requests.get(api_url, timeout=10)
             api_data = response.json()
@@ -142,30 +173,7 @@ class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
             description=result_message,
             color=embed_color
         )
-        embed.set_footer(text="🚀 Powered by RAPIDFIRE CORP")
+        embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-        # Log reset to webhook (if set)
-        webhook_url = webhook_urls.get(interaction.guild.id)
-        if webhook_url:
-            log_embed = discord.Embed(
-                title="🔄 KeyAuth License Reset Logged",
-                color=embed_color
-            )
-            log_embed.add_field(name="🔑 License Key:", value=f"||{license_key}||", inline=False)
-            log_embed.add_field(name="👤 User:", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
-            log_embed.add_field(name="⏳ Timestamp:", value=f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", inline=False)
-            log_embed.set_footer(text="🚀 Powered by RAPIDFIRE CORP")
-            requests.post(webhook_url, json={"embeds": [log_embed.to_dict()]})
-
-# Button Handling for License Reset
-class ResetButton(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-
-    @discord.ui.button(label="🔑 Reset License", style=discord.ButtonStyle.success, custom_id="reset_license")
-    async def reset_license(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = LicenseResetModal(interaction)
-        await interaction.response.send_modal(modal)
 
 bot.run(BOT_TOKEN)
