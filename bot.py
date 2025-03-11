@@ -56,18 +56,6 @@ def is_admin():
         return interaction.user.guild_permissions.administrator
     return app_commands.check(predicate)
 
-# Slash Command to Check Bot Ping
-@bot.tree.command(name="ping", description="Check bot latency.")
-async def ping(interaction: discord.Interaction):
-    latency = round(bot.latency * 1000)
-    embed = discord.Embed(
-        title="🏓 Bot Latency",
-        description=f"📡 **Ping:** `{latency}ms`",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
-    await interaction.response.send_message(embed=embed)
-
 # Slash Command to Set Seller Key (Admin Only)
 @bot.tree.command(name="setsellerkey", description="Set the KeyAuth seller key for this server.")
 @is_admin()
@@ -167,5 +155,20 @@ class LicenseResetModal(Modal, title="🔑 Enter Your License Key"):
         embed = discord.Embed(title="🔄 License Reset Result", description=result_message, color=embed_color)
         embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        # 🔹 FIX: Proper Webhook Logging
+        if "webhook_url" in data[guild_id]:
+            webhook_url = data[guild_id]["webhook_url"]
+
+            log_embed = discord.Embed(
+                title="🔄 License Key Reset Logged",
+                color=embed_color
+            )
+            log_embed.add_field(name="🔑 License Key:", value=f"||{license_key}||", inline=False)
+            log_embed.add_field(name="👤 User:", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
+            log_embed.add_field(name="⏳ Timestamp:", value=f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", inline=False)
+            log_embed.set_footer(text="🚀 Powered by RAPIDFIRE CORPORATION")
+
+            requests.post(webhook_url, json={"embeds": [log_embed.to_dict()]})
 
 bot.run(BOT_TOKEN)
